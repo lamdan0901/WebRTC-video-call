@@ -1,0 +1,230 @@
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen",
+    "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, "Courier New",
+    monospace;
+}
+
+p {
+  margin: 0;
+}
+
+video {
+  width: 400px;
+  height: 350px;
+  display: inline-block;
+}
+
+.container {
+  height: 100%;
+  position: relative;
+}
+
+.App {
+  text-align: center;
+  height: 100vh;
+}
+
+.disabled {
+  pointer-events: none;
+  opacity: 0.75;
+}
+
+.App-logo {
+  height: 40vmin;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .App-logo {
+    animation: App-logo-spin infinite 20s linear;
+  }
+}
+
+.App-header {
+  background-color: #282c34;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: calc(10px + 2vmin);
+  color: white;
+}
+
+.App-link {
+  color: #61dafb;
+}
+
+#initiator {
+  width: auto;
+  height: 21px;
+}
+
+.video-wrapper {
+  max-width: 840px;
+  justify-content: space-between;
+  margin: auto;
+  display: flex;
+}
+
+.video {
+  display: flex;
+  flex-direction: column;
+  margin-left: 5px;
+}
+
+.username {
+  position: relative;
+  top: 10px;
+}
+
+#messages-viewer {
+  width: 500px;
+  height: 400px;
+  margin: 8px auto;
+  border-radius: 8px;
+  background-color: #eee;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+}
+#messages {
+  width: 98%;
+  height: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+}
+
+#messages div {
+  display: flex;
+  flex-direction: column;
+}
+
+#messages label {
+  font-size: 11px;
+  color: #333;
+}
+.my-label {
+  align-self: flex-end;
+}
+.partner-label {
+  align-self: flex-start;
+}
+
+#messages p {
+  display: block;
+  width: fit-content;
+  word-wrap: break-word;
+  max-width: 48%;
+  margin-bottom: 5px;
+  border-radius: 5px;
+  padding: 8px 6px;
+}
+.my-msg {
+  background-color: rgb(60, 45, 114);
+  color: #eee;
+  align-self: flex-end;
+}
+.partner-msg {
+  background-color: #38445a;
+  color: #eee;
+}
+
+.buttons-wrapper {
+  width: 400px;
+  margin: auto;
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 1rem;
+}
+.button-cam-on {
+  background-color: #408ef5;
+}
+.button-cam-off {
+  background-color: #f59140;
+}
+.button-share {
+  background-color: #0e8aa0;
+}
+.button-share-stop {
+  background-color: #a07e0e;
+}
+.button-disconnect {
+  background-color: #b31409;
+}
+.button-create {
+  background-color: #405cf5;
+  position: relative;
+  top: 50px;
+}
+.button {
+  backface-visibility: hidden;
+  border-radius: 6px;
+  color: #fff;
+  cursor: pointer;
+  height: 44px;
+  line-height: 1.15;
+  padding: 0 25px;
+  position: relative;
+  text-align: center;
+  border: none;
+  outline: none;
+  overflow: hidden;
+}
+.button:hover {
+  box-shadow: rgba(50, 50, 93, 0.1) 0 0 0 1px inset,
+    rgba(50, 50, 93, 0.2) 0 6px 15px 0, rgba(0, 0, 0, 0.1) 0 2px 2px 0,
+    rgba(50, 151, 211, 0.3) 0 0 0 4px;
+}
+
+.input-wrapper {
+  display: flex;
+  width: 400px;
+  margin: 10px auto 0px;
+  justify-content: space-between;
+}
+
+.form__group {
+  width: 260px;
+  display: inline-block;
+}
+
+.form__label {
+  font-family: "Roboto", sans-serif;
+  font-size: 1.2rem;
+  margin-left: 2rem;
+  margin-top: 0.7rem;
+  display: block;
+  transition: all 0.3s;
+  transform: translateY(0rem);
+}
+
+.form__input {
+  color: #333;
+  font-size: 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: 0.2rem;
+  background-color: rgb(255, 255, 255);
+  border: none;
+  width: 90%;
+  display: block;
+  border: 1px solid #3a4457;
+  transition: all 0.3s;
+  outline: none;
+}
+
+.form__input:placeholder-shown + .form__label {
+  opacity: 0;
+  visibility: hidden;
+  -webkit-transform: translateY(-4rem);
+  transform: translateY(-4rem);
+}
