@@ -27,6 +27,19 @@ const constraints = {
   audio: true,
 };
 
+const rtcConfig = {
+  iceServers: [
+    {
+      urls: "stun:stun.stunprotocol.org",
+    },
+    {
+      urls: "turn:numb.viagenie.ca",
+      credential: "muazkh",
+      username: "webrtc@live.com",
+    },
+  ],
+};
+
 const Room = ({ match }) => {
   const [currentUserVideo, setCurrentUserVideo] = useState();
   const [userName, setUserName] = useState("");
@@ -91,21 +104,13 @@ const Room = ({ match }) => {
         setPartnerName("");
       });
     });
+    // eslint-disable-next-line
   }, []);
 
   function createPeer(userID) {
-    const peer = new RTCPeerConnection({
-      iceServers: [
-        {
-          urls: "stun:stun.stunprotocol.org",
-        },
-        {
-          urls: "turn:numb.viagenie.ca",
-          credential: "muazkh",
-          username: "webrtc@live.com",
-        },
-      ],
-    });
+    const peer = new RTCPeerConnection(rtcConfig);
+
+    peer.onnegotiationneeded = () => handleNegotiationNeededEvent(userID);
 
     peer.onicecandidate = (e) => {
       if (e.candidate) {
@@ -118,10 +123,8 @@ const Room = ({ match }) => {
     };
 
     // listen for when our peers actually add their tracks too
-    // `ontrack` is a callback that is fired when an RTP packet is received from the remote peer
+    // `ontrack` receives a callback that is fired when an RTP packet is received from the remote peer
     peer.ontrack = (e) => (partnerVideo.current.srcObject = e.streams[0]);
-
-    peer.onnegotiationneeded = () => handleNegotiationNeededEvent(userID);
 
     return peer;
   }
@@ -132,7 +135,7 @@ const Room = ({ match }) => {
   }
 
   async function handleNegotiationNeededEvent(userID) {
-    // offer is a Session Description of the local state to be shared with the remote peer.
+    // `offer` is a session description of the local state to be shared with the remote peer.
     const offer = await peerRef.current.createOffer();
     await peerRef.current.setLocalDescription(offer);
 
