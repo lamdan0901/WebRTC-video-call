@@ -47,7 +47,7 @@ const Room = ({ match }) => {
 
   const [audioEnabled, setAudioEnabled] = useState(true);
   const [videoEnabled, setVideoEnabled] = useState(true);
-  const [isSharingScreen, setIsSharingScreen] = useState(false);
+  const [isSharingScreen, setIsSharingScreen] = useState(true);
 
   const [text, setText] = useState("");
   const [messages, setMessages] = useState([]);
@@ -66,45 +66,64 @@ const Room = ({ match }) => {
   const dataChannelRef = useRef();
   const senders = useRef([]);
 
+  const screenTrack = useRef();
+  const stream2 = useRef();
+
   useEffect(() => {
     navigator.mediaDevices.getUserMedia(constraints).then((stream) => {
       userVideo.current.srcObject = stream;
       userStream.current = stream;
-      // setCurrentUserVideo(stream);
 
-      socketRef.current = io.connect("/");
-      socketRef.current.emit("join room", match.params.roomID);
+      navigator.mediaDevices
+        .getDisplayMedia({
+          cursor: true,
+        })
+        .then((stream) => {
+          screenTrack.current = stream.getTracks()[0];
+          userScreenShare.current.srcObject = stream;
+          stream2.current = stream;
+          setIsSharingScreen(true);
 
-      socketRef.current.on("other user joined", (userID) => {
-        peerRef.current = createPeer(userID);
+          socketRef.current = io.connect("/");
+          socketRef.current.emit("join room", match.params.roomID);
 
-        createDataChannel();
+          socketRef.current.on("other user joined", (userID) => {
+            peerRef.current = createPeer(userID);
 
-        userStream.current.getTracks().forEach((track) => {
-          peerRef.current.addTrack(track, userStream.current);
+            peerRef.current.addTrack(
+              screenTrack.current,
+              userStream.current,
+              stream2.current
+            );
+
+            createDataChannel();
+
+            userStream.current.getTracks().forEach((track) => {
+              peerRef.current.addTrack(track, userStream.current);
+            });
+
+            partnerUserID.current = userID;
+          });
+
+          socketRef.current.on("new user joined", (userID) => {
+            partnerUserID.current = userID;
+          });
+
+          socketRef.current.on("connect", () => {
+            console.log("client connected");
+          });
+
+          socketRef.current.on("offer", handleOffer);
+
+          socketRef.current.on("answer", handleAnswer);
+
+          socketRef.current.on("ice-candidate", handleICECandidate);
+
+          socketRef.current.on("user left", () => {
+            partnerVideo.current.srcObject = null;
+            setPartnerName("");
+          });
         });
-
-        partnerUserID.current = userID;
-      });
-
-      socketRef.current.on("new user joined", (userID) => {
-        partnerUserID.current = userID;
-      });
-
-      socketRef.current.on("connect", () => {
-        console.log("client connected");
-      });
-
-      socketRef.current.on("offer", handleOffer);
-
-      socketRef.current.on("answer", handleAnswer);
-
-      socketRef.current.on("ice-candidate", handleICECandidate);
-
-      socketRef.current.on("user left", () => {
-        partnerVideo.current.srcObject = null;
-        setPartnerName("");
-      });
     });
     // eslint-disable-next-line
   }, []);
@@ -127,13 +146,12 @@ const Room = ({ match }) => {
     // listen for when our peers actually add their tracks too
     // `ontrack` receives a callback that is fired when an RTP packet is received from the remote peer
     peer.ontrack = (e) => {
-      console.log("e: ", e);
-      // console.log("ontrack: called", e.streams.length);
-      console.log("sub=======", e.streams[0]);
       partnerVideo.current.srcObject = e.streams[0];
+      console.log("e.streams.length: ", e.streams.length);
       if (e.streams[1]) {
         partnerScreenShare.current.srcObject = e.streams[1];
       }
+      return false;
     };
 
     return peer;
@@ -145,7 +163,6 @@ const Room = ({ match }) => {
   }
 
   async function handleNegotiationNeeded(userID) {
-    console.log("negotiate needed");
     // `offer` is a session description of the local state to be shared with the remote peer.
     const offer = await peerRef.current.createOffer();
     await peerRef.current.setLocalDescription(offer);
@@ -163,7 +180,7 @@ const Room = ({ match }) => {
 
   async function handleOffer(incoming) {
     if (!peerRef.current) {
-      peerRef.current = createPeer(socketRef.current);
+      peerRef.current = createPeer(incoming.caller);
       setUserName("Offer creator");
       setPartnerName(incoming.name);
 
@@ -175,12 +192,19 @@ const Room = ({ match }) => {
       const desc = new RTCSessionDescription(incoming.sdp);
       await peerRef.current.setRemoteDescription(desc);
 
+      peerRef.current.addTrack(
+        screenTrack.current,
+        userStream.current,
+        stream2.current
+      );
+
       await userStream.current.getTracks().forEach((track) => {
         peerRef.current.addTrack(track, userStream.current);
       });
 
       const answer = await peerRef.current.createAnswer();
       await peerRef.current.setLocalDescription(answer);
+
       const payload = {
         target: incoming.caller,
         caller: socketRef.current.id,
@@ -194,6 +218,7 @@ const Room = ({ match }) => {
 
       const answer = await peerRef.current.createAnswer();
       await peerRef.current.setLocalDescription(answer);
+
       const payload = {
         target: incoming.caller,
         caller: socketRef.current.id,
@@ -207,9 +232,7 @@ const Room = ({ match }) => {
   function handleAnswer(message) {
     setPartnerName(message.name);
     const desc = new RTCSessionDescription(message.sdp);
-    peerRef.current
-      .setRemoteDescription(desc)
-      .catch((e) => console.log("eertaasa", e));
+    peerRef.current.setRemoteDescription(desc).catch((e) => console.log(e));
   }
 
   function handleICECandidate(icecandidate) {
@@ -237,9 +260,7 @@ const Room = ({ match }) => {
     //   peerRef.current.removeTrack(sender);
     // });
 
-    console.log(peerRef.current.getSenders());
     const screenTrack = stream.getTracks()[0];
-    console.log("pub====", stream, stream.getTracks());
 
     // const videoTrack = senders.current.find(
     //   (sender) => sender.track.kind === "video"
