@@ -41,13 +41,13 @@ const rtcConfig = {
 };
 
 const Room = ({ match }) => {
-  // const [currentUserVideo, setCurrentUserVideo] = useState();
   const [userName, setUserName] = useState("");
   const [partnerName, setPartnerName] = useState("");
 
   const [audioEnabled, setAudioEnabled] = useState(true);
   const [videoEnabled, setVideoEnabled] = useState(true);
-  const [isSharingScreen, setIsSharingScreen] = useState(true);
+  const [isSharingScreen, setIsSharingScreen] = useState(false);
+  const [isPartnerSharingScreen, setIsPartnerSharingScreen] = useState(false);
 
   const [text, setText] = useState("");
   const [messages, setMessages] = useState([]);
@@ -61,69 +61,56 @@ const Room = ({ match }) => {
   const partnerScreenShare = useRef();
 
   const peerRef = useRef();
-  // const peerRef2 = useRef();
   const socketRef = useRef();
   const dataChannelRef = useRef();
-  const senders = useRef([]);
-
-  const screenTrack = useRef();
-  const stream2 = useRef();
 
   useEffect(() => {
     navigator.mediaDevices.getUserMedia(constraints).then((stream) => {
       userVideo.current.srcObject = stream;
       userStream.current = stream;
 
-      navigator.mediaDevices
-        .getDisplayMedia({
-          cursor: true,
-        })
-        .then((stream) => {
-          screenTrack.current = stream.getTracks()[0];
-          userScreenShare.current.srcObject = stream;
-          stream2.current = stream;
-          setIsSharingScreen(true);
+      socketRef.current = io.connect("/");
+      socketRef.current.emit("join room", match.params.roomID);
 
-          socketRef.current = io.connect("/");
-          socketRef.current.emit("join room", match.params.roomID);
+      socketRef.current.on("other user joined", (userID) => {
+        peerRef.current = createPeer(userID);
 
-          socketRef.current.on("other user joined", (userID) => {
-            peerRef.current = createPeer(userID);
-
-            peerRef.current.addTrack(
-              screenTrack.current,
-              userStream.current,
-              stream2.current
-            );
-
-            createDataChannel();
-
-            userStream.current.getTracks().forEach((track) => {
-              peerRef.current.addTrack(track, userStream.current);
-            });
-
-            partnerUserID.current = userID;
-          });
-
-          socketRef.current.on("new user joined", (userID) => {
-            partnerUserID.current = userID;
-          });
-
-          socketRef.current.on("connect", () => {
-            console.log("client connected");
-          });
-
-          socketRef.current.on("offer", handleOffer);
-
-          socketRef.current.on("answer", handleAnswer);
-
-          socketRef.current.on("ice-candidate", handleICECandidate);
-
-          socketRef.current.on("user left", () => {
-            partnerVideo.current.srcObject = null;
-            setPartnerName("");
-          });
+        userStream.current.getTracks().forEach((track) => {
+          peerRef.current.addTrack(track, userStream.current);
         });
+
+        createDataChannel();
+
+        partnerUserID.current = userID;
+      });
+
+      socketRef.current.on("new user joined", (userID) => {
+        partnerUserID.current = userID;
+      });
+
+      socketRef.current.on("offer", handleOffer);
+
+      socketRef.current.on("answer", handleAnswer);
+
+      socketRef.current.on("ice-candidate", handleICECandidate);
+
+      socketRef.current.on("connect", () => {
+        console.log("connected to server");
+      });
+
+      socketRef.current.on("stop sharing screen", () => {
+        partnerScreenShare.current.srcObject = null;
+        setIsPartnerSharingScreen(false);
+      });
+
+      socketRef.current.on("user left", () => {
+        partnerVideo.current.srcObject = null;
+        if (partnerScreenShare.current.srcObject) {
+          partnerScreenShare.current.srcObject = null;
+          setIsPartnerSharingScreen(false);
+        }
+        setPartnerName("");
+      });
     });
     // eslint-disable-next-line
   }, []);
@@ -146,12 +133,15 @@ const Room = ({ match }) => {
     // listen for when our peers actually add their tracks too
     // `ontrack` receives a callback that is fired when an RTP packet is received from the remote peer
     peer.ontrack = (e) => {
-      partnerVideo.current.srcObject = e.streams[0];
-      console.log("e.streams.length: ", e.streams.length);
-      if (e.streams[1]) {
-        partnerScreenShare.current.srcObject = e.streams[1];
+      if (
+        partnerVideo?.current?.srcObject?.id &&
+        partnerVideo?.current?.srcObject?.id !== e.streams[0].id
+      ) {
+        partnerScreenShare.current.srcObject = e.streams[0];
+        setIsPartnerSharingScreen(true);
+      } else {
+        partnerVideo.current.srcObject = e.streams[0];
       }
-      return false;
     };
 
     return peer;
@@ -163,7 +153,6 @@ const Room = ({ match }) => {
   }
 
   async function handleNegotiationNeeded(userID) {
-    // `offer` is a session description of the local state to be shared with the remote peer.
     const offer = await peerRef.current.createOffer();
     await peerRef.current.setLocalDescription(offer);
 
@@ -191,12 +180,6 @@ const Room = ({ match }) => {
 
       const desc = new RTCSessionDescription(incoming.sdp);
       await peerRef.current.setRemoteDescription(desc);
-
-      peerRef.current.addTrack(
-        screenTrack.current,
-        userStream.current,
-        stream2.current
-      );
 
       await userStream.current.getTracks().forEach((track) => {
         peerRef.current.addTrack(track, userStream.current);
@@ -251,65 +234,34 @@ const Room = ({ match }) => {
   }
 
   async function shareScreen() {
+    if (!peerRef?.current) {
+      return;
+    }
+
     const stream = await navigator.mediaDevices.getDisplayMedia({
       cursor: true,
     });
 
-    // peerRef.current.getSenders().forEach((sender) => {
-    //   // sender.stop();
-    //   peerRef.current.removeTrack(sender);
-    // });
-
     const screenTrack = stream.getTracks()[0];
-
-    // const videoTrack = senders.current.find(
-    //   (sender) => sender.track.kind === "video"
-    // );
-    // if (!videoTrack) return;
-
     peerRef.current.addTrack(screenTrack, stream);
 
-    // videoTrack.replaceTrack(screenTrack);
     setIsSharingScreen(true);
-
-    // userVideo.current.srcObject = stream;
     userScreenShare.current.srcObject = stream;
-    // userStream.current = stream;
 
-    screenTrack.onended = function () {
-      userScreenShare.current.srcObject
-        .getTracks()
-        .forEach((track) => track.stop());
-      setIsSharingScreen(false);
-
-      userScreenShare.current.srcObject = null;
-      // userVideo.current.srcObject = currentUserVideo;
-      // findAndReplaceVideoTrack();
+    screenTrack.onended = () => {
+      stopSharingScreen();
     };
   }
 
   function stopSharingScreen() {
-    // userVideo.current.srcObject
     userScreenShare.current.srcObject
       .getVideoTracks()
       .forEach((track) => track.stop());
-    setIsSharingScreen(false);
-
     userScreenShare.current.srcObject = null;
 
-    // userVideo.current.srcObject = currentUserVideo;
-    // findAndReplaceVideoTrack();
+    setIsSharingScreen(false);
+    socketRef.current.emit("stop sharing screen", partnerUserID.current);
   }
-
-  // function findAndReplaceVideoTrack() {
-  //   const videoTrack = senders.current.find(
-  //     (sender) => sender.track.kind === "video"
-  //   );
-  //   if (videoTrack) {
-  //     videoTrack.replaceTrack(currentUserVideo.getTracks()[1]);
-  //     setIsSharingScreen(false);
-  //   }
-  // }
 
   function toggleAudio() {
     userVideo.current.srcObject.getAudioTracks()[0].enabled = !audioEnabled;
@@ -322,7 +274,7 @@ const Room = ({ match }) => {
   }
 
   window.addEventListener("beforeunload", () =>
-    socketRef.current.emit("disconnect from socket")
+    socketRef.current.emit("user left")
   );
 
   return (
@@ -340,17 +292,20 @@ const Room = ({ match }) => {
 
       <div className="video-wrapper">
         <video
-          className="screen-share"
+          className={isSharingScreen ? "screen-share" : "hidden-element"}
           autoPlay
           playsInline
           ref={userScreenShare}
         />
+        {!isSharingScreen && <div></div>}
+
         <video
-          className="screen-share"
+          className={isPartnerSharingScreen ? "screen-share" : "hidden-element"}
           autoPlay
           playsInline
           ref={partnerScreenShare}
         />
+        {!isPartnerSharingScreen && <div></div>}
       </div>
 
       <div className="buttons-wrapper">
@@ -380,17 +335,15 @@ const Room = ({ match }) => {
             Stop sharing screen
           </button>
         ) : (
-          senders.current && (
-            <button onClick={shareScreen} className="button button-share">
-              Share screen
-            </button>
-          )
+          <button onClick={shareScreen} className="button button-share">
+            Share screen
+          </button>
         )}
 
         <button
           className="button button-disconnect"
           onClick={() => {
-            socketRef.current.emit("disconnect from socket");
+            socketRef.current.emit("user left");
             window.location.href = "/";
           }}
         >

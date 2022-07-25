@@ -25,6 +25,10 @@ video {
   opacity: 0.75;
 }
 
+.hidden-element {
+  display: none;
+}
+
 .video-wrapper {
   max-width: 840px;
   justify-content: space-between;

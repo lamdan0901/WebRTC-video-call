@@ -16,13 +16,13 @@ io.on("connection", (socket) => {
     }
 
     // if there is another one already in this room, send my info to them
-    const otherUser = rooms[roomID].find((id) => id !== socket.id);
-    if (otherUser) {
+    const otherUserId = rooms[roomID].find((id) => id !== socket.id);
+    if (otherUserId) {
       // send to req creator other user info
-      socket.emit("other user joined", otherUser);
+      socket.emit("other user joined", otherUserId);
 
       // send to other user my id
-      socket.to(otherUser).emit("new user joined", socket.id);
+      socket.to(otherUserId).emit("new user joined", socket.id);
     }
   });
 
@@ -38,13 +38,16 @@ io.on("connection", (socket) => {
     io.to(incoming.target).emit("ice-candidate", incoming.candidate);
   });
 
+  socket.on("stop sharing screen", (userId) => {
+    io.to(userId).emit("stop sharing screen");
+  });
+
   socket.on("disconnect", () => {
     console.log(new Date().toLocaleTimeString() + " disconnected");
     socket.broadcast.emit("user left");
   });
 
-  socket.on("disconnect from socket", () => {
-    console.log("disconnect from socket triggered");
+  socket.on("trigger disconnect", () => {
     socket.disconnect(true);
     socket.broadcast.emit("user left");
   });
