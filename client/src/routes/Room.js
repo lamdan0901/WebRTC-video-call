@@ -197,46 +197,32 @@ const Room = ({ match }) => {
     console.log("handleOffer");
     if (!peerRef.current) {
       peerRef.current = createPeer(incoming.caller);
-      // setUserName("Offer creator");
-      // setPartnerName(incoming.name);
-
-      // peerRef.current.ondatachannel = (e) => {
-      //   dataChannelRef.current = e.channel;
-      //   dataChannelRef.current.onmessage = handleReceiveMessage;
-      // };
-
-      const desc = new RTCSessionDescription(incoming.sdp);
-      await peerRef.current.setRemoteDescription(desc);
 
       await userStream.current.getTracks().forEach((track) => {
         peerRef.current.addTrack(track, userStream.current);
       });
-
-      const answer = await peerRef.current.createAnswer();
-      await peerRef.current.setLocalDescription(answer);
-
-      const payload = {
-        target: incoming.caller,
-        caller: socketRef.current.id,
-        name: "Offer creator",
-        sdp: peerRef.current.localDescription,
-      };
-      socketRef.current.emit("answer", payload);
-    } else {
-      const desc = new RTCSessionDescription(incoming.sdp);
-      await peerRef.current.setRemoteDescription(desc);
-
-      const answer = await peerRef.current.createAnswer();
-      await peerRef.current.setLocalDescription(answer);
-
-      const payload = {
-        target: incoming.caller,
-        caller: socketRef.current.id,
-        name: "Offer creator",
-        sdp: peerRef.current.localDescription,
-      };
-      socketRef.current.emit("answer", payload);
     }
+    // setUserName("Offer creator");
+    // setPartnerName(incoming.name);
+
+    // peerRef.current.ondatachannel = (e) => {
+    //   dataChannelRef.current = e.channel;
+    //   dataChannelRef.current.onmessage = handleReceiveMessage;
+    // };
+
+    const desc = new RTCSessionDescription(incoming.sdp);
+    await peerRef.current.setRemoteDescription(desc);
+
+    const answer = await peerRef.current.createAnswer();
+    await peerRef.current.setLocalDescription(answer);
+
+    const payload = {
+      target: incoming.caller,
+      caller: socketRef.current.id,
+      name: "Offer creator",
+      sdp: peerRef.current.localDescription,
+    };
+    socketRef.current.emit("answer", payload);
   }
 
   function handleAnswer(answer) {

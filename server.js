@@ -51,30 +51,29 @@ io.on("connection", (socket) => {
     console.log("socket on offer");
     if (!myConnection) {
       myConnection = new wrtc.RTCPeerConnection(rtcConfig);
-
-      myConnection.ontrack = (event) => {
-        console.log("myConnection on ontrack");
-
-        event.streams[0].getTracks().forEach((track) => {
-          myConnection.addTrack(track, event.streams[0]);
-
-          console.log(streams[currRoomId]);
-
-          if (streams[currRoomId]) {
-            streams[currRoomId].push(event.streams[0]);
-          } else {
-            streams[currRoomId] = event.streams[0];
-          }
-        });
-      };
-
-      myConnection.onicecandidate = (event) => {
-        console.log("myConnection on onicecandidate");
-        if (event.candidate) {
-          io.to(payload.caller).emit("ice-candidate", event.candidate);
-        }
-      };
     }
+    myConnection.ontrack = (event) => {
+      console.log("myConnection on ontrack");
+
+      event.streams[0].getTracks().forEach((track) => {
+        myConnection.addTrack(track, event.streams[0]);
+
+        console.log(streams[currRoomId]);
+
+        if (streams[currRoomId]) {
+          streams[currRoomId].push(event.streams[0]);
+        } else {
+          streams[currRoomId] = event.streams[0];
+        }
+      });
+    };
+
+    myConnection.onicecandidate = (event) => {
+      console.log("myConnection on onicecandidate");
+      if (event.candidate) {
+        io.to(payload.caller).emit("ice-candidate", event.candidate);
+      }
+    };
 
     await myConnection.setRemoteDescription(
       new wrtc.RTCSessionDescription(payload.sdp)
