@@ -66,10 +66,9 @@ const Room = ({ match }) => {
   const socketRef = useRef();
   const dataChannelRef = useRef();
 
-  useEffect(() => {
-    console.log(remoteVideos);
-    // eslint-disable-next-line
-  }, [remoteVideos]);
+  // useEffect(() => {
+  //   console.log(remoteVideos);
+  // }, [remoteVideos]);
 
   useEffect(() => {
     navigator.mediaDevices.getUserMedia(constraints).then((stream) => {
@@ -84,12 +83,12 @@ const Room = ({ match }) => {
         handleNegotiationNeeded();
 
         userStream.current.getTracks().forEach((track) => {
+          console.log("addTrack called");
           peerRef.current.addTrack(track, userStream.current);
         });
       });
 
-      socketRef.current.on("other users in the room", (otherUsers, streams) => {
-        console.log("streams: ", streams);
+      socketRef.current.on("other users in the room", (otherUsers) => {
         console.log("other users in the room");
         peerRef.current = createPeer();
         handleNegotiationNeeded();
@@ -142,8 +141,7 @@ const Room = ({ match }) => {
 
     // peer.onnegotiationneeded = () => handleNegotiationNeeded(userID);
 
-    peer.onicecandidate = () => {
-      const e = new RTCPeerConnectionIceEvent();
+    peer.onicecandidate = (e) => {
       console.log("peer.onicecandidate");
       if (e.candidate) {
         const payload = {

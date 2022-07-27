@@ -39,10 +39,10 @@ io.on("connection", (socket) => {
     const otherUsers = rooms[roomID].filter((id) => id !== socket.id);
 
     if (otherUsers.length !== 0) {
-      socket.emit("other users in the room", otherUsers, streams[currRoomId]);
+      socket.emit("other users in the room", otherUsers);
 
       otherUsers.forEach((id) => {
-        socket.to(id).emit("new user joined", socket.id, streams[currRoomId]);
+        socket.to(id).emit("new user joined", socket.id);
       });
     }
   });
@@ -52,13 +52,12 @@ io.on("connection", (socket) => {
     if (!myConnection) {
       myConnection = new wrtc.RTCPeerConnection(rtcConfig);
     }
+
     myConnection.ontrack = (event) => {
       console.log("myConnection on ontrack");
 
       event.streams[0].getTracks().forEach((track) => {
         myConnection.addTrack(track, event.streams[0]);
-
-        console.log(streams[currRoomId]);
 
         if (streams[currRoomId]) {
           streams[currRoomId].push(event.streams[0]);
