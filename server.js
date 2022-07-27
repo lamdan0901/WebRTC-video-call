@@ -4,38 +4,97 @@ const app = express();
 const server = http.createServer(app);
 const socket = require("socket.io");
 const io = socket(server);
+const wrtc = require("wrtc");
 
 const rooms = {};
+const streams = {};
+let myConnection;
+let currRoomId;
+
+const rtcConfig = {
+  iceServers: [
+    {
+      urls: "stun:stun.stunprotocol.org",
+    },
+    {
+      urls: "turn:numb.viagenie.ca",
+      credential: "muazkh",
+      username: "webrtc@live.com",
+    },
+  ],
+};
 
 io.on("connection", (socket) => {
   socket.on("join room", (roomID) => {
-    if (rooms[roomID]) {
+    currRoomId = roomID;
+
+    // if the room existed n this user has never been there before
+    if (rooms[roomID] && !rooms[roomID].includes(socket.id)) {
       rooms[roomID].push(socket.id);
     } else {
       rooms[roomID] = [socket.id];
+      socket.emit("joined room");
     }
 
-    // if there is another one already in this room, send my info to them
-    const otherUserId = rooms[roomID].find((id) => id !== socket.id);
-    if (otherUserId) {
-      // send to req creator other user info
-      socket.emit("other user joined", otherUserId);
+    const otherUsers = rooms[roomID].filter((id) => id !== socket.id);
 
-      // send to other user my id
-      socket.to(otherUserId).emit("new user joined", socket.id);
+    if (otherUsers.length !== 0) {
+      socket.emit("other users in the room", otherUsers, streams[currRoomId]);
+
+      otherUsers.forEach((id) => {
+        socket.to(id).emit("new user joined", socket.id, streams[currRoomId]);
+      });
     }
   });
 
-  socket.on("offer", (payload) => {
-    io.to(payload.target).emit("offer", payload);
+  socket.on("offer", async (payload) => {
+    console.log("socket on offer");
+    if (!myConnection) {
+      myConnection = new wrtc.RTCPeerConnection(rtcConfig);
+
+      myConnection.ontrack = (event) => {
+        console.log("myConnection on ontrack");
+
+        event.streams[0].getTracks().forEach((track) => {
+          myConnection.addTrack(track, event.streams[0]);
+
+          console.log(streams[currRoomId]);
+
+          if (streams[currRoomId]) {
+            streams[currRoomId].push(event.streams[0]);
+          } else {
+            streams[currRoomId] = event.streams[0];
+          }
+        });
+      };
+
+      myConnection.onicecandidate = (event) => {
+        console.log("myConnection on onicecandidate");
+        if (event.candidate) {
+          io.to(payload.caller).emit("ice-candidate", event.candidate);
+        }
+      };
+    }
+
+    await myConnection.setRemoteDescription(
+      new wrtc.RTCSessionDescription(payload.sdp)
+    );
+    const answer = await myConnection.createAnswer();
+    await myConnection.setLocalDescription(answer);
+
+    io.to(payload.caller).emit("answer", answer);
   });
 
   socket.on("answer", (payload) => {
-    io.to(payload.target).emit("answer", payload);
+    console.log("socket on answer");
+    myConnection
+      .setRemoteDescription(new wrtc.RTCSessionDescription(payload.sdp))
+      .catch((e) => console.log(e));
   });
 
-  socket.on("ice-candidate", (incoming) => {
-    io.to(incoming.target).emit("ice-candidate", incoming.candidate);
+  socket.on("ice-candidate", (payload) => {
+    console.log("socket on candidate");
+    myConnection.addIceCandidate(new wrtc.RTCIceCandidate(payload.candidate));
   });
 
   socket.on("stop sharing screen", (userId) => {
