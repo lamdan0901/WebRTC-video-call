@@ -10,6 +10,7 @@ const rooms = {};
 const streams = {};
 let myConnection;
 let currRoomId;
+let oldEventStream;
 
 const rtcConfig = {
   iceServers: [
@@ -28,7 +29,7 @@ io.on("connection", (socket) => {
   socket.on("join room", (roomID) => {
     currRoomId = roomID;
 
-    // if the room existed n this user has never been there before
+    // if this room existed n this user has never been here before
     if (rooms[roomID] && !rooms[roomID].includes(socket.id)) {
       rooms[roomID].push(socket.id);
     } else {
@@ -53,24 +54,33 @@ io.on("connection", (socket) => {
       myConnection = new wrtc.RTCPeerConnection(rtcConfig);
     }
 
-    myConnection.ontrack = (event) => {
-      console.log("myConnection on ontrack");
-
-      event.streams[0].getTracks().forEach((track) => {
-        myConnection.addTrack(track, event.streams[0]);
-
-        if (streams[currRoomId]) {
-          streams[currRoomId].push(event.streams[0]);
-        } else {
-          streams[currRoomId] = event.streams[0];
-        }
-      });
-    };
+    myConnection.onnegotiationneeded = () => handleNegotiationNeeded();
 
     myConnection.onicecandidate = (event) => {
       console.log("myConnection on onicecandidate");
       if (event.candidate) {
         io.to(payload.caller).emit("ice-candidate", event.candidate);
+      }
+    };
+
+    myConnection.ontrack = (event) => {
+      console.log("myConnection on ontrack");
+
+      if (oldEventStream !== event.streams[0]) {
+        event.streams[0].getTracks().forEach((track) => {
+          myConnection.addTrack(track, event.streams[0]);
+        });
+
+        console.log("myConnection add tracks");
+        oldEventStream = event.streams[0];
+      }
+
+      console.log("streams[currRoomId]", streams[currRoomId]);
+
+      if (streams[currRoomId]) {
+        streams[currRoomId].push(event.streams[0]);
+      } else {
+        streams[currRoomId] = [event.streams[0]];
       }
     };
 
@@ -83,15 +93,26 @@ io.on("connection", (socket) => {
     io.to(payload.caller).emit("answer", answer);
   });
 
+  async function handleNegotiationNeeded(userID) {
+    console.log("server handle Negotiation");
+
+    const offer = await myConnection.createOffer();
+    await myConnection.setLocalDescription(offer);
+
+    const payload = {
+      sdp: myConnection.localDescription,
+    };
+
+    socketRef.current.emit("offer", payload);
+  }
+
   socket.on("answer", (payload) => {
-    console.log("socket on answer");
     myConnection
       .setRemoteDescription(new wrtc.RTCSessionDescription(payload.sdp))
       .catch((e) => console.log(e));
   });
 
   socket.on("ice-candidate", (payload) => {
-    console.log("socket on candidate");
     myConnection.addIceCandidate(new wrtc.RTCIceCandidate(payload.candidate));
   });
 
