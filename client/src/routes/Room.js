@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useState } from "react";
 import io from "socket.io-client";
+import { v1 as uuid } from "uuid";
 
 //* webapp flow:
 /**
@@ -29,13 +30,16 @@ const constraints = {
 
 const rtcConfig = {
   iceServers: [
+    { urls: "stun:stun2.1.google.com:19302" },
     {
-      urls: "stun:stun.stunprotocol.org",
+      urls: "turn:192.158.29.39:3478?transport=udp",
+      credential: "JZEOEt2V3Qb0y27GRntt2u2PAYA=",
+      username: "28224511:1379330808",
     },
     {
-      urls: "turn:numb.viagenie.ca",
-      credential: "muazkh",
-      username: "webrtc@live.com",
+      urls: "turn:192.158.29.39:3478?transport=tcp",
+      credential: "JZEOEt2V3Qb0y27GRntt2u2PAYA=",
+      username: "28224511:1379330808",
     },
   ],
 };
@@ -70,7 +74,7 @@ const Room = ({ match }) => {
       userVideo.current.srcObject = stream;
       userStream.current = stream;
 
-      console.log("my id", stream.id);
+      // console.log("my id", stream.id);
 
       socketRef.current = io.connect("/");
       socketRef.current.emit("join room", match.params.roomID);
@@ -95,13 +99,19 @@ const Room = ({ match }) => {
         });
         // handleNegotiationNeeded();
 
-        // userStream.current.getTracks().forEach((track) => {
-        //   peerRef.current.addTrack(track, userStream.current);
-        // });
-
         // createDataChannel();
 
         partnerID.current = otherUsers;
+      });
+
+      socketRef.current.on("streams updated", (streams) => {
+        console.log("streams updated: ", streams);
+
+        // setRemoteVideos((prev) => {
+        //   const found = prev.find((p) => p.id === streams.id);
+        //   return found ? [...prev] : [...prev, streams];
+        // });
+        // setRemoteVideos(streams);
       });
 
       socketRef.current.on("new user joined", (userID) => {
@@ -154,10 +164,7 @@ const Room = ({ match }) => {
     };
 
     peer.ontrack = (e) => {
-      // console.log("peer.ontrack", e.streams[0].id);
-
       setRemoteVideos((prev) => {
-        // console.log("prev: ", prev);
         const found = prev.find((p) => p.id === e.streams[0].id);
         return found ? [...prev] : [...prev, e.streams[0]];
       });
@@ -294,17 +301,27 @@ const Room = ({ match }) => {
     setVideoEnabled(!videoEnabled);
   }
 
+  function createRoom() {
+    socketRef.current.emit("user left", socketRef.current.id);
+    const id = uuid();
+    window.location.href = `/room/${id}`;
+  }
+
+  function leaveRoom() {
+    socketRef.current.emit("user left", socketRef.current.id);
+    window.location.href = "/";
+  }
+
   window.addEventListener("beforeunload", () =>
     socketRef.current.emit("user left")
   );
 
   const Video = ({ stream, index }) => {
-    // console.log("stream: ", stream.id);
     const ref = useRef();
 
     useEffect(() => {
       ref.current.srcObject = stream;
-      console.log("other stream id: ", stream.id);
+      // console.log("other stream id: ", stream.id);
     }, [stream]);
 
     return (
@@ -352,7 +369,6 @@ const Room = ({ match }) => {
         >
           {videoEnabled ? "Turn off cam" : "Turn on cam"}
         </button>
-
         <button
           onClick={toggleAudio}
           className={
@@ -361,7 +377,6 @@ const Room = ({ match }) => {
         >
           {audioEnabled ? "Turn off mic" : "Turn on mic"}
         </button>
-
         {isSharingScreen ? (
           <button
             onClick={stopSharingScreen}
@@ -374,15 +389,22 @@ const Room = ({ match }) => {
             Share screen
           </button>
         )}
-
-        <button
-          className="button button-disconnect"
-          onClick={() => {
-            socketRef.current.emit("user left", socketRef.current.id);
-            window.location.href = "/";
-          }}
-        >
+        <button className="button button-create-new" onClick={createRoom}>
+          Create New Room
+        </button>
+        <button className="button button-disconnect" onClick={leaveRoom}>
           Disconnect
+        </button>
+
+        <button className="button button-create-new">
+          <a
+            href={match.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ padding: "15px 45px" }}
+          >
+            Open new tab
+          </a>
         </button>
       </div>
 

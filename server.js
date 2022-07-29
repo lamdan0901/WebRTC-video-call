@@ -14,13 +14,16 @@ let oldEventStream;
 
 const rtcConfig = {
   iceServers: [
+    { urls: "stun:stun2.1.google.com:19302" },
     {
-      urls: "stun:stun.stunprotocol.org",
+      urls: "turn:192.158.29.39:3478?transport=udp",
+      credential: "JZEOEt2V3Qb0y27GRntt2u2PAYA=",
+      username: "28224511:1379330808",
     },
     {
-      urls: "turn:numb.viagenie.ca",
-      credential: "muazkh",
-      username: "webrtc@live.com",
+      urls: "turn:192.158.29.39:3478?transport=tcp",
+      credential: "JZEOEt2V3Qb0y27GRntt2u2PAYA=",
+      username: "28224511:1379330808",
     },
   ],
 };
@@ -50,14 +53,12 @@ io.on("connection", (socket) => {
 
   socket.on("offer", async (payload) => {
     console.log("socket on offer");
-    if (!myConnection) {
-      myConnection = new wrtc.RTCPeerConnection(rtcConfig);
-    }
-
-    myConnection.onnegotiationneeded = () => handleNegotiationNeeded();
+    // if (!myConnection) {
+    myConnection = new wrtc.RTCPeerConnection(rtcConfig);
+    // }
 
     myConnection.onicecandidate = (event) => {
-      console.log("myConnection on onicecandidate");
+      // console.log("myConnection on onicecandidate");
       if (event.candidate) {
         io.to(payload.caller).emit("ice-candidate", event.candidate);
       }
@@ -66,21 +67,24 @@ io.on("connection", (socket) => {
     myConnection.ontrack = (event) => {
       console.log("myConnection on ontrack");
 
-      if (oldEventStream !== event.streams[0]) {
+      if (oldEventStream?.id !== event.streams[0]?.id) {
         event.streams[0].getTracks().forEach((track) => {
           myConnection.addTrack(track, event.streams[0]);
         });
 
-        console.log("myConnection add tracks");
         oldEventStream = event.streams[0];
-      }
 
-      console.log("streams[currRoomId]", streams[currRoomId]);
+        if (streams[currRoomId]) {
+          streams[currRoomId].push(event.streams[0]);
+        } else {
+          streams[currRoomId] = [event.streams[0]];
+        }
 
-      if (streams[currRoomId]) {
-        streams[currRoomId].push(event.streams[0]);
-      } else {
-        streams[currRoomId] = [event.streams[0]];
+        // console.log(JSON.stringify(event.streams[0]));
+
+        // console.log("streams[currRoomId]", streams[currRoomId]);
+
+        // socket.broadcast.emit("update streams", streams[currRoomId]);
       }
     };
 
@@ -92,19 +96,6 @@ io.on("connection", (socket) => {
 
     io.to(payload.caller).emit("answer", answer);
   });
-
-  async function handleNegotiationNeeded(userID) {
-    console.log("server handle Negotiation");
-
-    const offer = await myConnection.createOffer();
-    await myConnection.setLocalDescription(offer);
-
-    const payload = {
-      sdp: myConnection.localDescription,
-    };
-
-    socketRef.current.emit("offer", payload);
-  }
 
   socket.on("answer", (payload) => {
     myConnection
