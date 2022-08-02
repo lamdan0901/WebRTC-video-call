@@ -45,8 +45,6 @@ const rtcConfig = {
 };
 
 const Room = ({ match }) => {
-  // const [userName, setUserName] = useState("");
-  // const [partnerName, setPartnerName] = useState("");
   const [remoteVideos, setRemoteVideos] = useState([]);
   // const [remoteScreens, setRemoteScreens] = useState([]);
 
@@ -74,7 +72,7 @@ const Room = ({ match }) => {
       userVideo.current.srcObject = stream;
       userStream.current = stream;
 
-      // console.log("my id", stream.id);
+      console.log("my id", stream.id);
 
       socketRef.current = io.connect("/");
       socketRef.current.emit("join room", match.params.roomID);

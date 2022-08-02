@@ -8,7 +8,7 @@ const wrtc = require("wrtc");
 
 const rooms = {};
 const streams = {};
-let myConnection;
+let myConnection, myConnection2;
 let currRoomId;
 let oldEventStream;
 
@@ -58,19 +58,22 @@ io.on("connection", (socket) => {
     // }
 
     myConnection.onicecandidate = (event) => {
-      // console.log("myConnection on onicecandidate");
       if (event.candidate) {
         io.to(payload.caller).emit("ice-candidate", event.candidate);
       }
     };
 
     myConnection.ontrack = (event) => {
-      console.log("myConnection on ontrack");
+      // console.log("myConnection on ontrack");
 
       if (oldEventStream?.id !== event.streams[0]?.id) {
         event.streams[0].getTracks().forEach((track) => {
           myConnection.addTrack(track, event.streams[0]);
         });
+
+        console.log(event.streams[0].id, event.streams[0]);
+
+        socket.broadcast.emit("streams updated", event.streams[0].id);
 
         oldEventStream = event.streams[0];
 
@@ -79,12 +82,6 @@ io.on("connection", (socket) => {
         } else {
           streams[currRoomId] = [event.streams[0]];
         }
-
-        // console.log(JSON.stringify(event.streams[0]));
-
-        // console.log("streams[currRoomId]", streams[currRoomId]);
-
-        // socket.broadcast.emit("update streams", streams[currRoomId]);
       }
     };
 
