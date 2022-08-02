@@ -2,7 +2,7 @@ import React, { useRef, useEffect, useState } from "react";
 import io from "socket.io-client";
 import { v1 as uuid } from "uuid";
 
-//* webapp flow:
+//* signalling flow:
 /**
  * A sends connection req to server -> create a room.
  *
@@ -155,8 +155,8 @@ const Room = ({ match }) => {
       console.log("other id", e.streams[0].id);
 
       setRemoteVideos((prev) => {
-        const found = prev.find((p) => p.id === e.streams[0].id);
-        return found ? [...prev] : [...prev, e.streams[0]];
+        const duplicatedVid = prev.find((p) => p.id === e.streams[0].id);
+        return duplicatedVid ? [...prev] : [...prev, e.streams[0]];
       });
 
       // if (
@@ -299,12 +299,13 @@ const Room = ({ match }) => {
   }
 
   function leaveRoom() {
-    socketRef.current.emit("user left", socketRef.current.id);
+    peerRef.current.close();
+    socketRef.current.emit("trigger disconnect", socketRef.current.id);
     window.location.href = "/";
   }
 
   window.addEventListener("beforeunload", () =>
-    socketRef.current.emit("user left")
+    socketRef.current.emit("trigger disconnect")
   );
 
   const Video = ({ stream, index }) => {

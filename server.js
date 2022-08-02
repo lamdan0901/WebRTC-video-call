@@ -7,10 +7,10 @@ const io = socket(server);
 const wrtc = require("wrtc");
 
 const rooms = {};
-const peers = {};
+// const peers = {};
 const streams = {};
-let conns;
-let myConnection;
+let peerList = [];
+let peerConn;
 let currRoomId;
 let oldEventStream;
 
@@ -39,7 +39,6 @@ io.on("connection", (socket) => {
       rooms[roomID].push(socket.id);
     } else {
       rooms[roomID] = [socket.id];
-      conns = [];
       socket.emit("joined room");
     }
 
@@ -55,80 +54,69 @@ io.on("connection", (socket) => {
   });
 
   socket.on("offer", async (payload) => {
-    myConnection = new wrtc.RTCPeerConnection(rtcConfig);
+    peerConn = new wrtc.RTCPeerConnection(rtcConfig);
 
     console.log("-------------------------------------");
 
     //* if this is the first peer connecting to server
     // if (Object.keys(peers).length === 0) {
-    if (conns.length === 0) {
-      // peers[socket.id] = myConnection;
+    if (peerList.length === 0) {
+      // peerConn = peerConn;
       console.log("the first peer connecting to server");
-      conns.push(myConnection);
 
-      myConnection.ontrack = (event) => {
+      peerConn.ontrack = (event) => {
         streams[currRoomId] = [event.streams[0]];
-        // oldEventStream = event.streams[0];
       };
     } else {
-      myConnection.ontrack = (event) => {
+      peerConn.ontrack = (event) => {
         if (oldEventStream?.id !== event.streams[0]?.id) {
-          //* 1. send the new stream to old peers
-          console.log(`//* 1 send the new stream to old peers`);
+          console.log(`// 1 send the new stream to old peers`);
 
-          conns.forEach((conn) => {
-            console.log("conn>>>");
+          console.log("conn >>> curr stream: ", event.streams[0].id);
 
+          peerList.forEach((conn) => {
             event.streams[0].getTracks().forEach((track) => {
-              console.log("addTrack for old peers", event.streams[0].id);
+              console.log("adding track", track.id);
               conn.addTrack(track, event.streams[0]);
             });
           });
 
-          //* 2. send old streams to the new peer
-          console.log(`//* 2 send old streams to the new peer`);
+          console.log(`// 2 send old streams to the new peer`);
 
-          streams[currRoomId]?.forEach((stream) => {
+          streams[currRoomId].forEach((stream) => {
             console.log("stream: ", stream.id);
             stream.getTracks().forEach((track) => {
-              console.log("add track for new peer");
-              myConnection.addTrack(track, stream);
+              console.log("adding track", track.id);
+              peerConn.addTrack(track, stream);
             });
           });
 
-          console.log("//* 3. save the new stream n the new peer");
-          //* 3. save the new stream n the new peer
-          peers[socket.id] = myConnection;
-
+          console.log("// 3. save the new stream n the new peer");
           streams[currRoomId].push(event.streams[0]);
           oldEventStream = event.streams[0];
         }
       };
     }
 
-    myConnection.onicecandidate = (event) => {
+    peerConn.onicecandidate = (event) => {
       if (event.candidate) {
         io.to(payload.caller).emit("ice-candidate", event.candidate);
       }
     };
 
-    await myConnection.setRemoteDescription(
+    await peerConn.setRemoteDescription(
       new wrtc.RTCSessionDescription(payload.sdp)
     );
-    const answer = await myConnection.createAnswer();
-    await myConnection.setLocalDescription(answer);
+    const answer = await peerConn.createAnswer();
+    await peerConn.setLocalDescription(answer);
+
+    peerList.push(peerConn);
 
     io.to(payload.caller).emit("answer", answer);
   });
 
-  socket.on("answer", (payload) => {
-    myConnection
-      .setRemoteDescription(new wrtc.RTCSessionDescription(payload.sdp))
-      .catch((e) => console.log(e));
-  });
-
   socket.on("ice-candidate", (payload) => {
-    myConnection.addIceCandidate(new wrtc.RTCIceCandidate(payload.candidate));
+    peerConn.addIceCandidate(new wrtc.RTCIceCandidate(payload.candidate));
   });
 
   socket.on("stop sharing screen", (userId) => {
