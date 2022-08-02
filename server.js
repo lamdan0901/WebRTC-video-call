@@ -7,8 +7,10 @@ const io = socket(server);
 const wrtc = require("wrtc");
 
 const rooms = {};
+const peers = {};
 const streams = {};
-let myConnection, myConnection2;
+let conns;
+let myConnection;
 let currRoomId;
 let oldEventStream;
 
@@ -37,6 +39,7 @@ io.on("connection", (socket) => {
       rooms[roomID].push(socket.id);
     } else {
       rooms[roomID] = [socket.id];
+      conns = [];
       socket.emit("joined room");
     }
 
@@ -52,36 +55,60 @@ io.on("connection", (socket) => {
   });
 
   socket.on("offer", async (payload) => {
-    console.log("socket on offer");
-    // if (!myConnection) {
     myConnection = new wrtc.RTCPeerConnection(rtcConfig);
-    // }
+
+    console.log("-------------------------------------");
+
+    //* if this is the first peer connecting to server
+    // if (Object.keys(peers).length === 0) {
+    if (conns.length === 0) {
+      // peers[socket.id] = myConnection;
+      console.log("the first peer connecting to server");
+      conns.push(myConnection);
+
+      myConnection.ontrack = (event) => {
+        streams[currRoomId] = [event.streams[0]];
+        // oldEventStream = event.streams[0];
+      };
+    } else {
+      myConnection.ontrack = (event) => {
+        if (oldEventStream?.id !== event.streams[0]?.id) {
+          //* 1. send the new stream to old peers
+          console.log(`//* 1 send the new stream to old peers`);
+
+          conns.forEach((conn) => {
+            console.log("conn>>>");
+
+            event.streams[0].getTracks().forEach((track) => {
+              console.log("addTrack for old peers", event.streams[0].id);
+              conn.addTrack(track, event.streams[0]);
+            });
+          });
+
+          //* 2. send old streams to the new peer
+          console.log(`//* 2 send old streams to the new peer`);
+
+          streams[currRoomId]?.forEach((stream) => {
+            console.log("stream: ", stream.id);
+            stream.getTracks().forEach((track) => {
+              console.log("add track for new peer");
+              myConnection.addTrack(track, stream);
+            });
+          });
+
+          console.log("//* 3. save the new stream n the new peer");
+          //* 3. save the new stream n the new peer
+          peers[socket.id] = myConnection;
+
+          streams[currRoomId].push(event.streams[0]);
+          oldEventStream = event.streams[0];
+        }
+      };
+    }
 
     myConnection.onicecandidate = (event) => {
       if (event.candidate) {
         io.to(payload.caller).emit("ice-candidate", event.candidate);
-      }
-    };
-
-    myConnection.ontrack = (event) => {
-      // console.log("myConnection on ontrack");
-
-      if (oldEventStream?.id !== event.streams[0]?.id) {
-        event.streams[0].getTracks().forEach((track) => {
-          myConnection.addTrack(track, event.streams[0]);
-        });
-
-        console.log(event.streams[0].id, event.streams[0]);
-
-        socket.broadcast.emit("streams updated", event.streams[0].id);
-
-        oldEventStream = event.streams[0];
-
-        if (streams[currRoomId]) {
-          streams[currRoomId].push(event.streams[0]);
-        } else {
-          streams[currRoomId] = [event.streams[0]];
-        }
       }
     };
 

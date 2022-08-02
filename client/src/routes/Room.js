@@ -102,16 +102,6 @@ const Room = ({ match }) => {
         partnerID.current = otherUsers;
       });
 
-      socketRef.current.on("streams updated", (streams) => {
-        console.log("streams updated: ", streams);
-
-        // setRemoteVideos((prev) => {
-        //   const found = prev.find((p) => p.id === streams.id);
-        //   return found ? [...prev] : [...prev, streams];
-        // });
-        // setRemoteVideos(streams);
-      });
-
       socketRef.current.on("new user joined", (userID) => {
         partnerID.current.push(userID);
         console.log("new user joined", userID);
@@ -162,10 +152,13 @@ const Room = ({ match }) => {
     };
 
     peer.ontrack = (e) => {
+      console.log("other id", e.streams[0].id);
+
       setRemoteVideos((prev) => {
         const found = prev.find((p) => p.id === e.streams[0].id);
         return found ? [...prev] : [...prev, e.streams[0]];
       });
+
       // if (
       //   partnerVideo?.current?.srcObject?.id &&
       //   partnerVideo?.current?.srcObject?.id !== e.streams[0].id
