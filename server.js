@@ -74,9 +74,13 @@ io.on("connection", (socket) => {
           console.log("conn >>> curr stream: ", event.streams[0].id);
 
           peerList.forEach((conn) => {
-            console.log("conn sctp: ", conn.sctp.state);
+            // let stream = event.streams[0];
             event.streams[0].getTracks().forEach((track) => {
-              console.log("adding track...");
+              console.log("adding track...", track.id);
+              // conn.addTransceiver(track, {
+              //   direction: "sendrecv",
+              //   streams: [stream],
+              // });
               conn.addTrack(track, event.streams[0]);
             });
           });
@@ -117,6 +121,7 @@ io.on("connection", (socket) => {
       dataChannel.onmessage = handleSendMessages;
     };
 
+    peerConn.socketId = socket.id;
     peerList.push(peerConn);
 
     io.to(payload.caller).emit("answer", answer);
@@ -124,10 +129,11 @@ io.on("connection", (socket) => {
 
   function handleSendMessages(e) {
     peerList.forEach((peerConn) => {
-      if (peerConn.dataChannel.readyState === "open") {
-        peerConn.dataChannel.send(
-          JSON.stringify({ text: e.data, id: socket.id })
-        );
+      if (
+        peerConn.dataChannel.readyState === "open" &&
+        peerConn.socketId !== socket.id
+      ) {
+        peerConn.dataChannel.send(e.data);
       }
     });
   }

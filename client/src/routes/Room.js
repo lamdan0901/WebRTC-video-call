@@ -207,19 +207,12 @@ const Room = ({ match }) => {
 
     peerRef.current.ondatachannel = (e) => {
       let recvMsgChannel = e.channel;
-      recvMsgChannel.onmessage = handleReceiveMessage;
+      recvMsgChannel.onmessage = (e) =>
+        setMessages((messages) => [
+          ...messages,
+          { yours: false, value: e.data },
+        ]);
     };
-  }
-
-  function handleReceiveMessage(e) {
-    const msg = JSON.parse(e.data);
-
-    if (msg.id !== socketRef.current.id) {
-      setMessages((messages) => [
-        ...messages,
-        { yours: false, value: msg.text },
-      ]);
-    }
   }
 
   function sendMessage() {
