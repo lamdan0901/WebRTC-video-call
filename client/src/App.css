@@ -35,10 +35,11 @@ video {
 }
 
 .video-wrapper {
-  max-width: 840px;
-  justify-content: space-between;
+  max-width: 940px;
+  justify-content: space-around;
   margin: auto;
   display: flex;
+  flex-wrap: wrap;
 }
 
 .video {

@@ -53,17 +53,15 @@ const Room = ({ match }) => {
   const [isSharingScreen, setIsSharingScreen] = useState(false);
 
   const [text, setText] = useState("");
-  // const [messages, setMessages] = useState([]);
+  const [messages, setMessages] = useState([]);
 
   const userVideo = useRef();
   const userStream = useRef();
   const userScreenShare = useRef();
 
-  const partnerID = useRef([]);
-  // const partnerVideo = useRef();
-  // const partnerScreenShare = useRef();
-
   const peerRef = useRef();
+  const partnerID = useRef([]);
+
   const socketRef = useRef();
   const dataChannelRef = useRef();
 
@@ -72,33 +70,23 @@ const Room = ({ match }) => {
       userVideo.current.srcObject = stream;
       userStream.current = stream;
 
-      console.log("my id", stream.id);
+      console.log("my stream id:", stream.id);
 
       socketRef.current = io.connect("/");
+
       socketRef.current.emit("join room", match.params.roomID);
 
       socketRef.current.on("joined room", () => {
         peerRef.current = createPeer();
-
-        userStream.current.getTracks().forEach((track) => {
-          console.log("addTrack called");
-          peerRef.current.addTrack(track, userStream.current);
-        });
-        // handleNegotiationNeeded();
+        createDataChannel();
+        addTracks();
       });
 
       socketRef.current.on("other users in the room", (otherUsers) => {
         console.log("other users in the room", otherUsers);
         peerRef.current = createPeer();
-
-        userStream.current.getTracks().forEach((track) => {
-          console.log("addTrack called");
-          peerRef.current.addTrack(track, userStream.current);
-        });
-        // handleNegotiationNeeded();
-
-        // createDataChannel();
-
+        createDataChannel();
+        addTracks();
         partnerID.current = otherUsers;
       });
 
@@ -107,7 +95,7 @@ const Room = ({ match }) => {
         console.log("new user joined", userID);
       });
 
-      socketRef.current.on("offer", handleOffer);
+      // socketRef.current.on("offer", handleOffer);
 
       socketRef.current.on("answer", handleAnswer);
 
@@ -134,6 +122,13 @@ const Room = ({ match }) => {
     // eslint-disable-next-line
   }, []);
 
+  function addTracks() {
+    console.log("addTrack called");
+    userStream.current.getTracks().forEach((track) => {
+      peerRef.current.addTrack(track, userStream.current);
+    });
+  }
+
   function createPeer() {
     const peer = new RTCPeerConnection(rtcConfig);
     console.log("create peer");
@@ -141,22 +136,30 @@ const Room = ({ match }) => {
     peer.onnegotiationneeded = () => handleNegotiationNeeded();
 
     peer.onicecandidate = (e) => {
-      console.log("peer.onicecandidate");
+      console.log("on icecandidate");
       if (e.candidate) {
-        const payload = {
-          // target: partnerID.current | null,
-          candidate: e.candidate,
-        };
-        socketRef.current.emit("ice-candidate", payload);
+        socketRef.current.emit("ice-candidate", e.candidate);
       }
     };
 
     peer.ontrack = (e) => {
-      console.log("other id", e.streams[0].id);
+      console.log("peer.ontrack called");
+      // console.log(e.streams.length);
+      // e.streams.forEach((stream) => {
+      //   console.log("e.streams", stream.id);
+      // });
 
       setRemoteVideos((prev) => {
-        const duplicatedVid = prev.find((p) => p.id === e.streams[0].id);
-        return duplicatedVid ? [...prev] : [...prev, e.streams[0]];
+        const newStreams = [];
+
+        e.streams.forEach((stream) => {
+          const isDuplicated = prev.find((p) => p.id === stream.id);
+          if (!isDuplicated) {
+            newStreams.push(stream);
+          }
+        });
+
+        return newStreams.length === 0 ? prev : [...prev, ...newStreams];
       });
 
       // if (
@@ -174,80 +177,55 @@ const Room = ({ match }) => {
   }
 
   async function handleNegotiationNeeded() {
-    console.log("handleNegotiationNeeded");
+    console.log("handle Negotiation Needed");
 
     const offer = await peerRef.current.createOffer();
     await peerRef.current.setLocalDescription(offer);
 
     const payload = {
-      target: "",
       caller: socketRef.current.id,
-      name: "",
       sdp: peerRef.current.localDescription,
     };
 
     socketRef.current.emit("offer", payload);
-    // setUserName("Offer acceptor");
-  }
-
-  async function handleOffer(incoming) {
-    console.log("handleOffer");
-
-    if (!peerRef.current) {
-      peerRef.current = createPeer(incoming.caller);
-
-      await userStream.current.getTracks().forEach((track) => {
-        peerRef.current.addTrack(track, userStream.current);
-      });
-    }
-    // setUserName("Offer creator");
-    // setPartnerName(incoming.name);
-
-    // peerRef.current.ondatachannel = (e) => {
-    //   dataChannelRef.current = e.channel;
-    //   dataChannelRef.current.onmessage = handleReceiveMessage;
-    // };
-
-    const desc = new RTCSessionDescription(incoming.sdp);
-    await peerRef.current.setRemoteDescription(desc);
-
-    const answer = await peerRef.current.createAnswer();
-    await peerRef.current.setLocalDescription(answer);
-
-    const payload = {
-      target: incoming.caller,
-      caller: socketRef.current.id,
-      name: "Offer creator",
-      sdp: peerRef.current.localDescription,
-    };
-    socketRef.current.emit("answer", payload);
   }
 
   function handleAnswer(answer) {
-    console.log("handleAnswer");
+    console.log("handle Answer");
     const desc = new RTCSessionDescription(answer);
     peerRef.current.setRemoteDescription(desc).catch((e) => console.log(e));
   }
 
   function handleICECandidate(icecandidate) {
-    console.log("handleICECandidate");
+    console.log("handle ICECandidate");
     const candidate = new RTCIceCandidate(icecandidate);
     peerRef.current.addIceCandidate(candidate).catch((e) => console.log(e));
   }
 
-  // function createDataChannel() {
-  //   dataChannelRef.current = peerRef.current.createDataChannel("dataChannel");
-  //   dataChannelRef.current.onmessage = handleReceiveMessage;
-  // }
+  function createDataChannel() {
+    dataChannelRef.current = peerRef.current.createDataChannel("dataChannel");
 
-  // function handleReceiveMessage(e) {
-  //   setMessages((messages) => [...messages, { yours: false, value: e.data }]);
-  // }
+    peerRef.current.ondatachannel = (e) => {
+      let recvMsgChannel = e.channel;
+      recvMsgChannel.onmessage = handleReceiveMessage;
+    };
+  }
+
+  function handleReceiveMessage(e) {
+    const msg = JSON.parse(e.data);
+
+    if (msg.id !== socketRef.current.id) {
+      setMessages((messages) => [
+        ...messages,
+        { yours: false, value: msg.text },
+      ]);
+    }
+  }
 
   function sendMessage() {
     if (dataChannelRef.current.readyState === "open") {
       dataChannelRef.current.send(text);
-      // setMessages((messages) => [...messages, { yours: true, value: text }]);
+      setMessages((messages) => [...messages, { yours: true, value: text }]);
       setText("");
     }
   }
@@ -293,9 +271,10 @@ const Room = ({ match }) => {
   }
 
   function createRoom() {
-    socketRef.current.emit("user left", socketRef.current.id);
-    const id = uuid();
-    window.location.href = `/room/${id}`;
+    peerRef.current.close();
+    socketRef.current.emit("trigger disconnect", socketRef.current.id);
+    // socketRef.current.emit("create room", socketRef.current.id);
+    window.location.href = `/room/${uuid()}`;
   }
 
   function leaveRoom() {
@@ -313,7 +292,7 @@ const Room = ({ match }) => {
 
     useEffect(() => {
       ref.current.srcObject = stream;
-      // console.log("other stream id: ", stream.id);
+      console.log("stream: ", stream.id);
     }, [stream]);
 
     return (
@@ -400,20 +379,20 @@ const Room = ({ match }) => {
         </button>
       </div>
 
-      {/* <div id="messages-viewer">
+      <div id="messages-viewer">
         <div id="messages">
           {messages.map((msg, index) => (
             <div key={index}>
-              <label className={msg.yours ? "my-label" : "partner-label"}>
+              {/* <label className={msg.yours ? "my-label" : "partner-label"}>
                 {msg.yours ? "You" : partnerName}
-              </label>
+              </label> */}
               <p className={msg.yours ? "my-msg" : "partner-msg"}>
                 {msg.value}
               </p>
             </div>
           ))}
         </div>
-      </div> */}
+      </div>
 
       <div className="input-wrapper">
         <div className="form__group">
@@ -443,3 +422,29 @@ const Room = ({ match }) => {
 };
 
 export default Room;
+
+// async function handleOffer(incoming) {
+//   console.log("handleOffer");
+
+//   if (!peerRef.current) {
+//     peerRef.current = createPeer(incoming.caller);
+
+//     await userStream.current.getTracks().forEach((track) => {
+//       peerRef.current.addTrack(track, userStream.current);
+//     });
+//   }
+
+//   const desc = new RTCSessionDescription(incoming.sdp);
+//   await peerRef.current.setRemoteDescription(desc);
+
+//   const answer = await peerRef.current.createAnswer();
+//   await peerRef.current.setLocalDescription(answer);
+
+//   const payload = {
+//     target: incoming.caller,
+//     caller: socketRef.current.id,
+//     name: "Offer creator",
+//     sdp: peerRef.current.localDescription,
+//   };
+//   socketRef.current.emit("answer", payload);
+// }

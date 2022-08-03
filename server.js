@@ -6,13 +6,16 @@ const socket = require("socket.io");
 const io = socket(server);
 const wrtc = require("wrtc");
 
-const rooms = {};
 // const peers = {};
+const rooms = {};
 const streams = {};
 let peerList = [];
+
+let roomCreator;
 let peerConn;
+let dataChannel;
 let currRoomId;
-let oldEventStream;
+let oldEventStreamId;
 
 const rtcConfig = {
   iceServers: [
@@ -34,12 +37,12 @@ io.on("connection", (socket) => {
   socket.on("join room", (roomID) => {
     currRoomId = roomID;
 
-    // if this room existed n this user has never been here before
-    if (rooms[roomID] && !rooms[roomID].includes(socket.id)) {
-      rooms[roomID].push(socket.id);
-    } else {
+    if (!rooms[roomID]) {
       rooms[roomID] = [socket.id];
+      roomCreator = socket.id;
       socket.emit("joined room");
+    } else if (!rooms[roomID].includes(socket.id)) {
+      rooms[roomID].push(socket.id);
     }
 
     const otherUsers = rooms[roomID].filter((id) => id !== socket.id);
@@ -58,10 +61,7 @@ io.on("connection", (socket) => {
 
     console.log("-------------------------------------");
 
-    //* if this is the first peer connecting to server
-    // if (Object.keys(peers).length === 0) {
     if (peerList.length === 0) {
-      // peerConn = peerConn;
       console.log("the first peer connecting to server");
 
       peerConn.ontrack = (event) => {
@@ -69,31 +69,32 @@ io.on("connection", (socket) => {
       };
     } else {
       peerConn.ontrack = (event) => {
-        if (oldEventStream?.id !== event.streams[0]?.id) {
-          console.log(`// 1 send the new stream to old peers`);
-
+        if (oldEventStreamId !== event.streams[0].id) {
+          console.log(`\n// 1 send the new stream to old peers`);
           console.log("conn >>> curr stream: ", event.streams[0].id);
 
           peerList.forEach((conn) => {
+            console.log("conn sctp: ", conn.sctp.state);
             event.streams[0].getTracks().forEach((track) => {
-              console.log("adding track", track.id);
+              console.log("adding track...");
               conn.addTrack(track, event.streams[0]);
             });
           });
 
-          console.log(`// 2 send old streams to the new peer`);
+          console.log(`\n// 2 send old streams to the new peer`);
 
           streams[currRoomId].forEach((stream) => {
             console.log("stream: ", stream.id);
             stream.getTracks().forEach((track) => {
-              console.log("adding track", track.id);
-              peerConn.addTrack(track, stream);
+              console.log("adding track...");
+              peerConn.addTrack(track, ...streams[currRoomId]);
             });
           });
 
-          console.log("// 3. save the new stream n the new peer");
+          console.log("\n// 3. save the new stream n the new peer");
+
           streams[currRoomId].push(event.streams[0]);
-          oldEventStream = event.streams[0];
+          oldEventStreamId = event.streams[0].id;
         }
       };
     }
@@ -110,13 +111,29 @@ io.on("connection", (socket) => {
     const answer = await peerConn.createAnswer();
     await peerConn.setLocalDescription(answer);
 
+    peerConn.dataChannel = peerConn.createDataChannel("dataChannel");
+    peerConn.ondatachannel = (e) => {
+      dataChannel = e.channel;
+      dataChannel.onmessage = handleSendMessages;
+    };
+
     peerList.push(peerConn);
 
     io.to(payload.caller).emit("answer", answer);
   });
 
-  socket.on("ice-candidate", (payload) => {
-    peerConn.addIceCandidate(new wrtc.RTCIceCandidate(payload.candidate));
+  function handleSendMessages(e) {
+    peerList.forEach((peerConn) => {
+      if (peerConn.dataChannel.readyState === "open") {
+        peerConn.dataChannel.send(
+          JSON.stringify({ text: e.data, id: socket.id })
+        );
+      }
+    });
+  }
+
+  socket.on("ice-candidate", (candidate) => {
+    peerConn.addIceCandidate(new wrtc.RTCIceCandidate(candidate));
   });
 
   socket.on("stop sharing screen", (userId) => {
@@ -128,7 +145,13 @@ io.on("connection", (socket) => {
     socket.broadcast.emit("user left");
   });
 
-  socket.on("trigger disconnect", () => {
+  socket.on("trigger disconnect", (id) => {
+    if (id === roomCreator) {
+      peerList = [];
+      delete rooms[currRoomId];
+      oldEventStreamId = null;
+    }
+    // streams[currRoomId].filter(stream=>stream.id!==)
     socket.disconnect(true);
     socket.broadcast.emit("user left");
   });
